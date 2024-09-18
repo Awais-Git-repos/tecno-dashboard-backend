@@ -6,6 +6,65 @@ const Collection = require("../Models/Checking"); // Updated model name
 const FileMetadata = require("../Models/FileMetaData"); // New model
 const reportFolderPath = path.join(__dirname, "..", "uploads");
 
+// const databaseWrite = async (req, res) => {
+//   try {
+//     if (!req.file) {
+//       return res.status(400).json({ msg: "No file uploaded" });
+//     }
+
+//     const filePath = path.join(reportFolderPath, req.file.filename);
+//     console.log("The reading file is ", filePath);
+//     const stream = fs.createReadStream(filePath);
+
+//     // Create file metadata entry
+//     const fileMetadata = new FileMetadata({
+//       filename: req.file.filename,
+//       fileId: new mongoose.Types.ObjectId(),
+//     });
+//     await fileMetadata.save();
+
+//     let rows = [];
+
+//     stream
+//       .pipe(parse({ headers: true }))
+//       .on("data", (row) => {
+//         // Validate and convert data before pushing to rows
+//         if (row.Qty) {
+//           row.Qty = parseFloat(row.Qty); // Convert Qty to a number
+//           if (isNaN(row.Qty)) {
+//             row.Qty = 0; // Handle NaN by setting to null or a default value
+//           }
+//         }
+
+//         // Add fileId to each record
+//         row.fileId = fileMetadata.fileId;
+//         rows.push(row); // Accumulate each row from the file
+//       })
+//       .on("end", async () => {
+//         // Insert records into the database
+//         try {
+//           await Collection.insertMany(rows);
+//           return res.status(200).json({ msg: "Records successfully saved" });
+//         } catch (error) {
+//           console.error("Error saving records:", error);
+//           return res
+//             .status(500)
+//             .json({ msg: "Error saving data to the database", error });
+//         }
+//       })
+//       .on("error", (error) => {
+//         console.error(`Error reading CSV file (${req.file.filename}):`, error);
+//         return res
+//           .status(500)
+//           .json({ msg: "Error processing the file", error });
+//       });
+//   } catch (error) {
+//     return res
+//       .status(500)
+//       .json({ msg: "Error occurred during file processing", error });
+//   }
+// };
+
 const databaseWrite = async (req, res) => {
   try {
     if (!req.file) {
@@ -13,6 +72,7 @@ const databaseWrite = async (req, res) => {
     }
 
     const filePath = path.join(reportFolderPath, req.file.filename);
+    console.log("The reading file is ", filePath);
     const stream = fs.createReadStream(filePath);
 
     // Create file metadata entry
@@ -25,13 +85,29 @@ const databaseWrite = async (req, res) => {
     let rows = [];
 
     stream
-      .pipe(parse({ headers: true }))
+      .pipe(parse({ headers: true, quote: '"' })) // Ensure quoted fields are handled correctly
       .on("data", (row) => {
-        // Validate and convert data before pushing to rows
-        if (row.Qty) {
-          row.Qty = parseFloat(row.Qty); // Convert Qty to a number
+        // Process Qty field
+        if (row["Qty"]) {
+          row.Qty = parseFloat(row["Qty"]);
           if (isNaN(row.Qty)) {
-            row.Qty = 0; // Handle NaN by setting to null or a default value
+            row.Qty = 0; // Handle NaN by setting to 0
+          }
+        }
+
+        // Process Inspected Qty field
+        if (row["InspectedQty"]) {
+          row.InspectedQty = parseFloat(row["InspectedQty"]); // Convert Inspected Qty to number
+          if (isNaN(row.InspectedQty)) {
+            row.InspectedQty = 0; // Handle NaN by setting to 0
+          }
+        }
+
+        // Process Week field
+        if (row["Week"]) {
+          row.Week = parseInt(row["Week"]); // Convert Week to integer
+          if (isNaN(row.Week)) {
+            row.Week = null; // Handle NaN by setting to null
           }
         }
 

@@ -34,6 +34,8 @@ if (cluster.isMaster) {
 
   app.use("/fileupload", require("./Routes/databaseWrite"));
 
+  app.use("/defectsRatio", require("./Routes/defectsRatio"));
+
   // Database connection setup
   function database() {
     try {
