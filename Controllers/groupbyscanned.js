@@ -76,7 +76,7 @@ const GroupByScanned = async (req, res) => {
         $addFields: {
           convertedQty: {
             $convert: {
-              input: "$Qty",
+              input: "$DefectsDescriptionqty",
               to: "int",
               onError: 0,
               onNull: 0,
