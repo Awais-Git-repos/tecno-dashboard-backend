@@ -20,10 +20,12 @@ const {
   databaseWrite,
   getFilesDetails,
   deleteRecords,
+  deleteFile,
 } = require("../Controllers/databaseWrite");
 
 routes.post("/", upload.single("file"), databaseWrite);
 routes.get("/fileData", getFilesDetails);
 routes.delete("/fileDelete", deleteRecords);
+routes.delete("/fileError", deleteFile);
 
 module.exports = routes;

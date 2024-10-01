@@ -193,4 +193,35 @@ const deleteRecords = async (req, res) => {
   }
 };
 
-module.exports = { databaseWrite, getFilesDetails, deleteRecords };
+const deleteFile = async (req, res) => {
+  try {
+    // Step 1: Find all file IDs with no associated records in the Collection
+    const unusedFiles = await FileMetadata.find({}).lean(); // Fetch all file metadata
+
+    const filesToDelete = [];
+
+    for (const fileMeta of unusedFiles) {
+      const count = await Collection.countDocuments({
+        fileId: fileMeta.fileId,
+      });
+      if (count === 0) {
+        filesToDelete.push(fileMeta.fileId);
+      }
+    }
+
+    // Step 2: Delete file metadata for files with no associated records
+    const deleteResults = await FileMetadata.deleteMany({
+      fileId: { $in: filesToDelete },
+    });
+
+    // Send a success response
+    return res.status(200).json({
+      msg: `${deleteResults.deletedCount} unused files deleted successfully`,
+    });
+  } catch (error) {
+    console.error("Error deleting unused files:", error);
+    return res.status(500).json({ msg: "Error deleting unused files", error });
+  }
+};
+
+module.exports = { databaseWrite, getFilesDetails, deleteRecords, deleteFile };

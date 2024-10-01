@@ -3,6 +3,9 @@ const os = require("os");
 const express = require("express");
 const db = require("./Database/db");
 const cors = require("cors");
+const seeding = require("./seeding");
+const dotenv = require("dotenv");
+dotenv.config();
 
 // Check if the process is the master process
 if (cluster.isMaster) {
@@ -36,11 +39,14 @@ if (cluster.isMaster) {
 
   app.use("/defectsRatio", require("./Routes/defectsRatio"));
 
+  app.use("/api/user", require("./Routes/user"));
+
   // Database connection setup
   function database() {
     try {
       const node = server;
       db(node);
+      seeding();
     } catch (error) {
       console.log(error);
     }
