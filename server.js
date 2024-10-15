@@ -38,6 +38,7 @@ if (cluster.isMaster) {
   app.use("/fileupload", require("./Routes/databaseWrite"));
 
   app.use("/defectsRatio", require("./Routes/defectsRatio"));
+  app.use("/inspectedQty", require("./Routes/inspectedQty"));
 
   app.use("/api/user", require("./Routes/user"));
 

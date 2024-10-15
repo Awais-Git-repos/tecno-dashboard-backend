@@ -1,0 +1,4 @@
+Date	Week	Month	Year	Lines	Models	DefectsDescriptionqty	InspectedQty	Qty	DefectStatus	Check
+45510	32	August	2024	A11	Kj7	1	5000	200	Scanned	Assembly
+45511	32	August	2024	A11	Kj7	1	5000	100	Un-scanned	Assembly
+45512	32	August	2024	A11	Kj7	1	5000	20	Reset	Assembly

@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const { Schema } = mongoose;
 
 const collectionSchema = new Schema({
-  Date: String,
+  Date: { type: String, required: true },
   Week: Number,
   Month: String,
   Year: Number,
