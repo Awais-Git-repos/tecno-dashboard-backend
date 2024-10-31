@@ -1,14 +1,20 @@
 // const Collection = require("../Models/Checking");
 // const NodeCache = require("node-cache");
-// const cache = new NodeCache({ stdTTL: 600 }); // Create a new cache instance with a TTL of 600 seconds (10 minutes)
+// const cache = new NodeCache({ stdTTL: 600 }); // Cache TTL of 600 seconds (10 minutes)
 
 // const combineGroup = async (req, res) => {
-//   const { models, defects, lines } = req.body;
-//   const cacheKey = `combineGroup_${JSON.stringify({ models, defects, lines })}`; // Create a unique cache key based on the request parameters
+//   const { models, defects, lines, startDate, endDate } = req.body;
+//   console.log(startDate);
+//   const cacheKey = `combineGroup_${JSON.stringify({
+//     models,
+//     defects,
+//     lines,
+//     startDate,
+//     endDate,
+//   })}`; // Unique cache key based on request parameters
 
 //   // Check if the result is already cached
 //   const cachedData = cache.get(cacheKey);
-
 //   if (cachedData) {
 //     return res.status(200).json(cachedData);
 //   }
@@ -39,6 +45,17 @@
 //     }
 //     if (lines && lines.length > 0) {
 //       matchConditions.Lines = { $in: lines };
+//     }
+
+//     // Add date range filtering if startDate and/or endDate are provided
+//     if (startDate || endDate) {
+//       matchConditions.Date = {};
+//       if (startDate) {
+//         matchConditions.Date.$gte = startDate; // Use startDate directly as string
+//       }
+//       if (endDate) {
+//         matchConditions.Date.$lte = endDate; // Use endDate directly as string
+//       }
 //     }
 
 //     // Aggregation pipeline
@@ -264,7 +281,7 @@
 //                 unscanned: { $first: "$unscanned" },
 //                 reset: { $first: "$reset" },
 //                 topLines: {
-//                   $push: { line: "$_id.line", count: "$lineCount" },
+//                   $push: { line: "$_id.line", qty: "$lineCount" },
 //                 },
 //               },
 //             },
@@ -284,29 +301,23 @@
 //       },
 //     ];
 
-//     const data = await Collection.aggregate(pipeline);
+//     const results = await Collection.aggregate(pipeline);
 
-//     // Check if all results are empty
-//     if (
-//       !data ||
-//       data.length === 0 ||
-//       (!data[0].groupByErrors.length &&
-//         !data[0].groupByLines.length &&
-//         !data[0].groupByModels.length)
-//     ) {
-//       console.log("Aggregation returned no results");
-//       return res.status(404).json({ message: "No matching results" });
-//     }
+//     // const result = { results, modelList, damageList, lineList };
+//     const result = {
+//       data: results[0],
+//       uniqueModels: [...modelList],
+//       uniqueDamage: [...damageList],
+//       uniqueLines: [...lineList],
+//     };
 
-//     const result = { data: data[0], uniqueModels, uniqueDamage, uniqueLines };
-
-//     // Cache the result for future requests with an expiration time of 10 minutes
+//     // Cache the result for future requests
 //     cache.set(cacheKey, result);
 
-//     return res.status(200).json(result);
+//     res.status(200).json(result);
 //   } catch (error) {
-//     console.error("Error during aggregation:", error);
-//     return res.status(400).json(error);
+//     console.log(error);
+//     res.status(500).json({ message: "Server Error" });
 //   }
 // };
 
@@ -423,7 +434,13 @@ const combineGroup = async (req, res) => {
                     ],
                   },
                 },
-                models: { $push: { model: "$Models", qty: "$convertedQty" } },
+                models: {
+                  $push: {
+                    model: "$Models",
+                    qty: "$convertedQty",
+                    defectStatus: "$DefectStatus",
+                  },
+                },
               },
             },
             { $sort: { error: -1 } },
@@ -437,6 +454,33 @@ const combineGroup = async (req, res) => {
                 unscanned: { $first: "$unscanned" },
                 reset: { $first: "$reset" },
                 modelQty: { $sum: "$models.qty" },
+                scannedCount: {
+                  $sum: {
+                    $cond: [
+                      { $eq: ["$models.defectStatus", "Scanned"] },
+                      "$models.qty",
+                      0,
+                    ],
+                  },
+                },
+                unscannedCount: {
+                  $sum: {
+                    $cond: [
+                      { $eq: ["$models.defectStatus", "Un-scanned"] },
+                      "$models.qty",
+                      0,
+                    ],
+                  },
+                },
+                resetCount: {
+                  $sum: {
+                    $cond: [
+                      { $eq: ["$models.defectStatus", "reset"] },
+                      "$models.qty",
+                      0,
+                    ],
+                  },
+                },
               },
             },
             { $sort: { modelQty: -1 } },
@@ -448,7 +492,13 @@ const combineGroup = async (req, res) => {
                 unscanned: { $first: "$unscanned" },
                 reset: { $first: "$reset" },
                 topModels: {
-                  $push: { model: "$_id.model", qty: "$modelQty" },
+                  $push: {
+                    model: "$_id.model",
+                    qty: "$modelQty",
+                    scanned: "$scannedCount",
+                    unscanned: "$unscannedCount",
+                    reset: "$resetCount",
+                  },
                 },
               },
             },
@@ -497,7 +547,13 @@ const combineGroup = async (req, res) => {
                     ],
                   },
                 },
-                models: { $push: { model: "$Models", qty: "$convertedQty" } },
+                models: {
+                  $push: {
+                    model: "$Models",
+                    qty: "$convertedQty",
+                    defectStatus: "$DefectStatus",
+                  },
+                },
               },
             },
             { $sort: { error: -1 } },
@@ -511,6 +567,33 @@ const combineGroup = async (req, res) => {
                 unscanned: { $first: "$unscanned" },
                 reset: { $first: "$reset" },
                 totalQty: { $sum: "$models.qty" },
+                scannedCount: {
+                  $sum: {
+                    $cond: [
+                      { $eq: ["$models.defectStatus", "Scanned"] },
+                      "$models.qty",
+                      0,
+                    ],
+                  },
+                },
+                unscannedCount: {
+                  $sum: {
+                    $cond: [
+                      { $eq: ["$models.defectStatus", "Un-scanned"] },
+                      "$models.qty",
+                      0,
+                    ],
+                  },
+                },
+                resetCount: {
+                  $sum: {
+                    $cond: [
+                      { $eq: ["$models.defectStatus", "reset"] },
+                      "$models.qty",
+                      0,
+                    ],
+                  },
+                },
               },
             },
             { $sort: { totalQty: -1 } },
@@ -522,7 +605,13 @@ const combineGroup = async (req, res) => {
                 unscanned: { $first: "$unscanned" },
                 reset: { $first: "$reset" },
                 topModels: {
-                  $push: { model: "$_id.model", qty: "$totalQty" },
+                  $push: {
+                    model: "$_id.model",
+                    qty: "$totalQty",
+                    scanned: "$scannedCount",
+                    unscanned: "$unscannedCount",
+                    reset: "$resetCount",
+                  },
                 },
               },
             },
@@ -570,7 +659,13 @@ const combineGroup = async (req, res) => {
                     ],
                   },
                 },
-                lines: { $push: { line: "$Lines", qty: "$convertedQty" } },
+                lines: {
+                  $push: {
+                    line: "$Lines",
+                    qty: "$convertedQty",
+                    defectStatus: "$DefectStatus",
+                  },
+                },
               },
             },
             { $sort: { error: -1 } },
@@ -584,6 +679,33 @@ const combineGroup = async (req, res) => {
                 unscanned: { $first: "$unscanned" },
                 reset: { $first: "$reset" },
                 lineCount: { $sum: "$lines.qty" },
+                scannedCount: {
+                  $sum: {
+                    $cond: [
+                      { $eq: ["$lines.defectStatus", "Scanned"] },
+                      "$lines.qty",
+                      0,
+                    ],
+                  },
+                },
+                unscannedCount: {
+                  $sum: {
+                    $cond: [
+                      { $eq: ["$lines.defectStatus", "Un-scanned"] },
+                      "$lines.qty",
+                      0,
+                    ],
+                  },
+                },
+                resetCount: {
+                  $sum: {
+                    $cond: [
+                      { $eq: ["$lines.defectStatus", "reset"] },
+                      "$lines.qty",
+                      0,
+                    ],
+                  },
+                },
               },
             },
             { $sort: { lineCount: -1 } },
@@ -595,7 +717,13 @@ const combineGroup = async (req, res) => {
                 unscanned: { $first: "$unscanned" },
                 reset: { $first: "$reset" },
                 topLines: {
-                  $push: { line: "$_id.line", qty: "$lineCount" },
+                  $push: {
+                    line: "$_id.line",
+                    qty: "$lineCount",
+                    scanned: "$scannedCount",
+                    unscanned: "$unscannedCount",
+                    reset: "$resetCount",
+                  },
                 },
               },
             },
@@ -636,3 +764,269 @@ const combineGroup = async (req, res) => {
 };
 
 module.exports = combineGroup;
+
+// const Collection = require("../Models/Checking");
+// const NodeCache = require("node-cache");
+// const cache = new NodeCache({ stdTTL: 600 }); // Cache TTL of 600 seconds (10 minutes)
+
+// const combineGroup = async (req, res) => {
+//   const { models, defects, lines, startDate, endDate } = req.body;
+//   const cacheKey = `combineGroup_${JSON.stringify({
+//     models,
+//     defects,
+//     lines,
+//     startDate,
+//     endDate,
+//   })}`; // Unique cache key based on request parameters
+
+//   // Check if the result is already cached
+//   const cachedData = cache.get(cacheKey);
+//   if (cachedData) {
+//     return res.status(200).json(cachedData);
+//   }
+
+//   try {
+//     // Fetch distinct values
+//     const modelList = await Collection.distinct("Models");
+//     const damageList = await Collection.distinct("DefectsDescription");
+//     const lineList = await Collection.distinct("Lines");
+
+//     // Build dynamic match conditions based on user input
+//     const matchConditions = {};
+
+//     if (models && models.length > 0) {
+//       matchConditions.Models = { $in: models };
+//     }
+//     if (defects && defects.length > 0) {
+//       matchConditions.DefectsDescription = { $in: defects };
+//     }
+//     if (lines && lines.length > 0) {
+//       matchConditions.Lines = { $in: lines };
+//     }
+
+//     // Add date range filtering if startDate and/or endDate are provided
+//     if (startDate || endDate) {
+//       matchConditions.Date = {};
+//       if (startDate) matchConditions.Date.$gte = startDate;
+//       if (endDate) matchConditions.Date.$lte = endDate;
+//     }
+
+//     // Aggregation pipeline
+//     const pipeline = [
+//       {
+//         $match: matchConditions,
+//       },
+//       {
+//         $addFields: {
+//           convertedQty: {
+//             $convert: {
+//               input: "$DefectsDescriptionqty",
+//               to: "int",
+//               onError: 0,
+//               onNull: 0,
+//             },
+//           },
+//         },
+//       },
+//       {
+//         $facet: {
+//           groupByErrors: [
+//             {
+//               $group: {
+//                 _id: { defect: "$DefectsDescription", line: "$Lines" },
+//                 totalError: { $sum: "$convertedQty" },
+//                 scanned: {
+//                   $sum: {
+//                     $cond: [
+//                       { $eq: ["$DefectStatus", "Scanned"] },
+//                       "$convertedQty",
+//                       0,
+//                     ],
+//                   },
+//                 },
+//                 unscanned: {
+//                   $sum: {
+//                     $cond: [
+//                       { $eq: ["$DefectStatus", "Un-scanned"] },
+//                       "$convertedQty",
+//                       0,
+//                     ],
+//                   },
+//                 },
+//                 reset: {
+//                   $sum: {
+//                     $cond: [
+//                       { $eq: ["$DefectStatus", "Reset"] },
+//                       "$convertedQty",
+//                       0,
+//                     ],
+//                   },
+//                 },
+//               },
+//             },
+//             { $sort: { totalError: -1 } },
+//             {
+//               $group: {
+//                 _id: "$_id.defect",
+//                 totalError: { $first: "$totalError" },
+//                 topLines: {
+//                   $push: {
+//                     line: "$_id.line",
+//                     scanned: "$scanned",
+//                     unscanned: "$unscanned",
+//                     reset: "$reset",
+//                   },
+//                 },
+//               },
+//             },
+//             {
+//               $project: {
+//                 _id: 0,
+//                 defect: "$_id",
+//                 totalError: 1,
+//                 topLines: { $slice: ["$topLines", 10] },
+//               },
+//             },
+//           ],
+
+//           groupByLines: [
+//             {
+//               $group: {
+//                 _id: { line: "$Lines", model: "$Models" },
+//                 totalError: { $sum: "$convertedQty" },
+//                 scanned: {
+//                   $sum: {
+//                     $cond: [
+//                       { $eq: ["$DefectStatus", "Scanned"] },
+//                       "$convertedQty",
+//                       0,
+//                     ],
+//                   },
+//                 },
+//                 unscanned: {
+//                   $sum: {
+//                     $cond: [
+//                       { $eq: ["$DefectStatus", "Un-scanned"] },
+//                       "$convertedQty",
+//                       0,
+//                     ],
+//                   },
+//                 },
+//                 reset: {
+//                   $sum: {
+//                     $cond: [
+//                       { $eq: ["$DefectStatus", "Reset"] },
+//                       "$convertedQty",
+//                       0,
+//                     ],
+//                   },
+//                 },
+//               },
+//             },
+//             { $sort: { totalError: -1 } },
+//             {
+//               $group: {
+//                 _id: "$_id.line",
+//                 totalError: { $first: "$totalError" },
+//                 topModels: {
+//                   $push: {
+//                     model: "$_id.model",
+//                     scanned: "$scanned",
+//                     unscanned: "$unscanned",
+//                     reset: "$reset",
+//                   },
+//                 },
+//               },
+//             },
+//             {
+//               $project: {
+//                 _id: 0,
+//                 line: "$_id",
+//                 totalError: 1,
+//                 topModels: { $slice: ["$topModels", 10] },
+//               },
+//             },
+//           ],
+
+//           groupByModels: [
+//             {
+//               $group: {
+//                 _id: { model: "$Models", line: "$Lines" },
+//                 totalError: { $sum: "$convertedQty" },
+//                 scanned: {
+//                   $sum: {
+//                     $cond: [
+//                       { $eq: ["$DefectStatus", "Scanned"] },
+//                       "$convertedQty",
+//                       0,
+//                     ],
+//                   },
+//                 },
+//                 unscanned: {
+//                   $sum: {
+//                     $cond: [
+//                       { $eq: ["$DefectStatus", "Un-scanned"] },
+//                       "$convertedQty",
+//                       0,
+//                     ],
+//                   },
+//                 },
+//                 reset: {
+//                   $sum: {
+//                     $cond: [
+//                       { $eq: ["$DefectStatus", "Reset"] },
+//                       "$convertedQty",
+//                       0,
+//                     ],
+//                   },
+//                 },
+//               },
+//             },
+//             { $sort: { totalError: -1 } },
+//             {
+//               $group: {
+//                 _id: "$_id.model",
+//                 totalError: { $first: "$totalError" },
+//                 topLines: {
+//                   $push: {
+//                     line: "$_id.line",
+//                     scanned: "$scanned",
+//                     unscanned: "$unscanned",
+//                     reset: "$reset",
+//                   },
+//                 },
+//               },
+//             },
+//             {
+//               $project: {
+//                 _id: 0,
+//                 model: "$_id",
+//                 totalError: 1,
+//                 topLines: { $slice: ["$topLines", 10] },
+//               },
+//             },
+//           ],
+//         },
+//       },
+//     ];
+
+//     const results = await Collection.aggregate(pipeline);
+
+//     const result = {
+//       data: results[0],
+//       uniqueModels: modelList,
+//       uniqueDamage: damageList,
+//       uniqueLines: lineList,
+//     };
+
+//     // Cache the result for future requests
+//     cache.set(cacheKey, result);
+
+//     res.status(200).json(result);
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ message: "Server Error" });
+//   }
+// };
+
+// module.exports = combineGroup;
